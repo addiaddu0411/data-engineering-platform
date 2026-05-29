@@ -1,7 +1,16 @@
 import psycopg2
-from config import DB_CONFIG
 
+DB_CONFIG = {
+    "host": "localhost",
+    "database": "warehouse",
+    "user": "admin",
+    "password": "admin",
+    "port": 5432
+}
 
+# -----------------------------
+# RAW LOAD (INCREMENTAL)
+# -----------------------------
 def insert_data(df):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -9,43 +18,64 @@ def insert_data(df):
 
         print("Connected to PostgreSQL successfully!")
 
-        print("DF SHAPE:", df.shape)
-        print("DF COLUMNS:", df.columns)
-        print(df.head(2))
-
-        inserted = 0
-
         for _, row in df.iterrows():
-            try:
-                print("Inserting row...")
-
-                cursor.execute("""
-                    INSERT INTO pollution_data (
-                        state, county, city, date_local,
-                        no2_mean, o3_mean, so2_mean, co_mean
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    row.get("State"),
-                    row.get("County"),
-                    row.get("City"),
-                    row.get("Date Local"),
-                    row.get("NO2 Mean"),
-                    row.get("O3 Mean"),
-                    row.get("SO2 Mean"),
-                    row.get("CO Mean")
-                ))
-
-                inserted += 1
-
-            except Exception as e:
-                print("INSERT FAILED:", e)
+            cursor.execute("""
+                INSERT INTO customers (id, name, amount)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (id) DO NOTHING
+            """, (
+                row["id"],
+                row["name"],
+                row["amount"]
+            ))
 
         conn.commit()
         cursor.close()
         conn.close()
 
-        print("TOTAL INSERTED:", inserted)
+        print("Raw data load completed")
 
     except Exception as e:
-        print("DB CONNECTION ERROR:", e)
+        print("DB ERROR:", e)
+
+
+# -----------------------------
+# ANALYTICS LAYER
+# -----------------------------
+def build_analytics_layer(df):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+
+        print("Building analytics layer...")
+
+        for _, row in df.iterrows():
+
+            amount = row["amount"]
+
+            if amount >= 250:
+                tier = "VIP"
+            elif amount >= 150:
+                tier = "Gold"
+            else:
+                tier = "Standard"
+
+            cursor.execute("""
+                INSERT INTO customer_summary (id, name, total_amount, tier)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING
+            """, (
+                row["id"],
+                row["name"],
+                amount,
+                tier
+            ))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        print("Analytics layer completed")
+
+    except Exception as e:
+        print("Analytics DB ERROR:", e)

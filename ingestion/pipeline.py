@@ -2,7 +2,8 @@ from ingestion.csv_ingestion import load_csv
 from ingestion.cleaning import DataCleaner
 from ingestion.utils.validator import DataValidator
 from ingestion.utils.logger import get_logger
-from warehouse.db_loader import insert_data
+from warehouse.db_loader import insert_data, build_analytics_layer
+
 
 def run_pipeline(file_path):
     logger = get_logger("ETL_PIPELINE")
@@ -33,12 +34,16 @@ def run_pipeline(file_path):
         logger.error(f"Validation failed: {e}")
         return
 
-    # 4. WAREHOUSE LOAD (MISSING PIECE FIXED)
+    # 4. LOAD + ANALYTICS
     logger.info("Step 4: Loading into PostgreSQL warehouse")
 
     try:
         insert_data(df)
-        logger.info("Data successfully inserted into PostgreSQL")
+        logger.info("Raw data loaded into PostgreSQL")
+
+        build_analytics_layer(df)
+        logger.info("Analytics layer created successfully")
+
     except Exception as e:
         logger.error(f"Warehouse load failed: {e}")
         return
@@ -47,5 +52,4 @@ def run_pipeline(file_path):
 
 
 if __name__ == "__main__":
-    file_path = "/mnt/c/Users/Abhishek Pandey/Desktop/pollution_us_2000_2016.csv"
-    run_pipeline(file_path)
+    run_pipeline("data/raw/customers.csv")
