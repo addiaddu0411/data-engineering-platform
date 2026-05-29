@@ -1,0 +1,49 @@
+name: Airflow CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install apache-airflow pandas psycopg2-binary sqlalchemy
+
+      - name: Check Python syntax
+        run: |
+          python -m py_compile $(find . -name "*.py")
+
+      - name: Test DAG imports
+        run: |
+          python - << 'EOF'
+          import os
+          import sys
+          from airflow.models import DagBag
+
+          dags_folder = "airflow/dags" if os.path.exists("airflow/dags") else "dags"
+
+          dagbag = DagBag(dags_folder=dags_folder, include_examples=False)
+
+          if dagbag.import_errors:
+              print("DAG Import Errors Found:")
+              for dag, err in dagbag.import_errors.items():
+                  print(f"{dag}: {err}")
+              sys.exit(1)
+
+          print("All DAGs imported successfully")
+          EOF
